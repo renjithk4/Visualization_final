@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Feature Importance Visualizations</title>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <style>
+        .bar {
+            fill: steelblue;
+            transition: all 0.3s ease;
+        }
+
+        .bar:hover {
+            fill: orange;
+            transform: scale(1.1);
+        }
+
+        .pie-slice {
+            cursor: pointer;
+            transition: opacity 0.3s ease;
+        }
+
+        .pie-slice:hover {
+            opacity: 0.7;
+        }
+
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 8px;
+            font-size: 12px;
+            background: lightsteelblue;
+            border-radius: 8px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .legend {
+            font-size: 14px;
+        }
+
+        .legend rect {
+            width: 20px;
+            height: 20px;
+            stroke-width: 1;
+        }
+
+        .legend-text {
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .legend-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            margin-top: 20px;
+        }
+
+        .chart-container {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+        }
+
+        .heatmap-container {
+            margin-top: 50px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .time-series-container {
+            margin-top: 50px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .heatmap {
+            border: 1px solid #ccc;
+        }
+
+        .dropdown {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Feature Importance Visualizations</h1>
+
+    <!-- Feature Count Dropdown (to select N top features) -->
+    <div class="dropdown">
+        <label for="feature-count">Select Number of Features to Display: </label>
+        <select id="feature-count">
+            <option value="5">Top 5</option>
+            <option value="10">Top 10</option>
+            <option value="15">Top 15</option>
+            <option value="20">Top 20</option>
+            <option value="all">All Features</option>
+        </select>
+    </div>
+
+    <!-- Filter by Importance Threshold -->
+    <h2>Filter by Importance Threshold</h2>
+    <input type="range" id="importance-range" min="0" max="100" value="50" step="1" style="width: 100%;" />
+    <p>Importance Threshold: <span id="threshold-value">50</span></p>
+
+  
+
+    <!-- Bar Plot for Features -->
+    <h2>Features by Importance</h2>
+    <div class="chart-container">
+        <svg id="bar-chart" width="500" height="500"></svg>
+
+        <!-- Pie Chart for Feature Importance -->
+        <svg id="pie-chart" width="500" height="500"></svg>
+    </div>
+
+    <!-- Interactive Heatmap -->
+    <h2>Interactive Feature Importance Heatmap</h2>
+    <div class="heatmap-container">
+        <svg id="heatmap" width="500" height="500"></svg>
+    </div>
+
+    <!-- Time Series -->
+    <h2>Feature Values Over Time</h2>
+    <div class="time-series-container">
+        <svg id="time-series" width="500" height="400"></svg>
+    </div>
+
+    <!-- Correlation Heatmap -->
+    <h2>Feature Correlation Heatmap</h2>
+    <div class="heatmap-container">
+        <svg id="correlation-heatmap" width="500" height="500"></svg>
+    </div>
+
+    <!-- Legend for Pie Chart -->
+    <div id="pie-legend" class="legend-container"></div>
+
+    <script>
+        // Example data for features (extend this for your dataset)
+ const data = [
+            { Feature: "Q_VFD1_Temperature", Importance: 9.523409904996381 },
+            { Feature: "Q_VFD2_Temperature", Importance: 56.97438435556366 },
+            { Feature: "Q_VFD3_Temperature", Importance: 5.321473922869173 },
+            { Feature: "Q_VFD4_Temperature", Importance: 16.20161498736653 },
+            { Feature: "I_Stopper1_Status", Importance: 2.9958795091565475 },
+            { Feature: "I_Stopper2_Status", Importance: 1.924305369282699 },
+            { Feature: "I_Stopper3_Status", Importance: 1.1907887368461463 },
+            { Feature: "I_Stopper4_Status", Importance: 1.2374450986891905 },
+            { Feature: "I_Stopper5_Status", Importance: 1.161741829117761 },
+            { Feature: "I_MHS_GreenRocketTray", Importance: 1.750119462550241 },
+            { Feature: "I_R01_Gripper_Load", Importance: 50.83677711220821 },
+            { Feature: "I_R01_Gripper_Pot", Importance: 71.28352668451167 },
+            { Feature: "M_R01_BJointAngle_Degree", Importance: 1.0522346267890375 },
+            { Feature: "M_R01_LJointAngle_Degree", Importance: 1.00098359294071 },
+            { Feature: "M_R01_RJointAngle_Degree", Importance: 1.2962642556142856 },
+            { Feature: "M_R01_SJointAngle_Degree", Importance: 19.46104455571154 },
+            { Feature: "M_R01_TJointAngle_Degree", Importance: 1.0104271307230575 },
+            { Feature: "M_R01_UJointAngle_Degree", Importance: 1.0 },
+            { Feature: "I_R02_Gripper_Load", Importance: 13.892166577512741 },
+            { Feature: "I_R02_Gripper_Pot", Importance: 100.0 },
+            { Feature: "M_R02_BJointAngle_Degree", Importance: 2.500080842514138 },
+            { Feature: "M_R02_LJointAngle_Degree", Importance: 2.7631259626908706 },
+            { Feature: "M_R02_RJointAngle_Degree", Importance: 2.971749141388761 },
+            { Feature: "M_R02_SJointAngle_Degree", Importance: 3.561936888879258 },
+            { Feature: "M_R02_TJointAngle_Degree", Importance: 5.930625411948468 },
+            { Feature: "M_R02_UJointAngle_Degree", Importance: 1.5874162746740623 },
+            { Feature: "I_R03_Gripper_Load", Importance: 20.434442562382653 },
+            { Feature: "I_R03_Gripper_Pot", Importance: 20.539032402916494 },
+            { Feature: "M_R03_BJointAngle_Degree", Importance: 3.595573931972549 },
+            { Feature: "M_R03_LJointAngle_Degree", Importance: 2.137600897199931 },
+            { Feature: "M_R03_RJointAngle_Degree", Importance: 2.1608564635880976 },
+            { Feature: "M_R03_SJointAngle_Degree", Importance: 2.6073636087965903 },
+            { Feature: "M_R03_TJointAngle_Degree", Importance: 2.352568149368757 },
+            { Feature: "M_R03_UJointAngle_Degree", Importance: 2.4438602044932742 },
+            { Feature: "I_R04_Gripper_Load", Importance: 45.22722690923584 },
+            { Feature: "I_R04_Gripper_Pot", Importance: 18.212341379290915 },
+            { Feature: "M_R04_BJointAngle_Degree", Importance: 7.524405559399065 },
+            { Feature: "M_R04_LJointAngle_Degree", Importance: 5.007739363415668 },
+            { Feature: "M_R04_RJointAngle_Degree", Importance: 5.02160392249479 },
+            { Feature: "M_R04_SJointAngle_Degree", Importance: 5.737635642255733 },
+            { Feature: "M_R04_TJointAngle_Degree", Importance: 5.603732178865062 },
+            { Feature: "M_R04_UJointAngle_Degree", Importance: 5.51406519974577 }
+        ];
+
+        // Dynamic Time Series Data (replace this with actual feature values over time)
+        const timeSeriesData = [
+            { timestamp: "2024-12-01", feature: "Q_VFD2_Temperature", value: 45 },
+            { timestamp: "2024-12-02", feature: "Q_VFD2_Temperature", value: 50 },
+            { timestamp: "2024-12-03", feature: "Q_VFD2_Temperature", value: 55 },
+            { timestamp: "2024-12-04", feature: "Q_VFD2_Temperature", value: 60 },
+            { timestamp: "2024-12-01", feature: "I_R01_Gripper_Pot", value: 25 },
+            { timestamp: "2024-12-02", feature: "I_R01_Gripper_Pot", value: 30 },
+            { timestamp: "2024-12-03", feature: "I_R01_Gripper_Pot", value: 35 },
+            { timestamp: "2024-12-04", feature: "I_R01_Gripper_Pot", value: 40 }
+        ];
+
+        // Function to update all visualizations based on feature selection and threshold
+        function updateVisualizations() {
+            const numFeatures = document.getElementById("feature-count").value;
+            const filteredData = numFeatures === "all" ? data : data.slice(0, numFeatures);
+
+            // Clear previous charts
+            d3.select("#bar-chart").selectAll("*").remove();
+            d3.select("#pie-chart").selectAll("*").remove();
+            d3.select("#heatmap").selectAll("*").remove();
+            d3.select("#time-series").selectAll("*").remove();
+            d3.select("#correlation-heatmap").selectAll("*").remove();
+
+            // Bar chart setup
+            const margin = { top: 20, right: 30, bottom: 70, left: 100 },
+                width = 500 - margin.left - margin.right,
+                height = 500 - margin.top - margin.bottom;
+
+            const svgBar = d3.select("#bar-chart")
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            const x = d3.scaleBand()
+                .domain(filteredData.map(d => d.Feature))
+                .range([0, width])
+                .padding(0.4);
+
+            const y = d3.scaleLinear()
+                .domain([0, d3.max(filteredData, d => d.Importance)])
+                .nice()
+                .range([height, 0]);
+
+            svgBar.selectAll(".bar")
+                .data(filteredData)
+                .enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", d => x(d.Feature))
+                .attr("y", d => y(d.Importance))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - y(d.Importance));
+
+            svgBar.append("g")
+                .attr("class", "x axis")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x));
+
+            svgBar.append("g")
+                .attr("class", "y axis")
+                .call(d3.axisLeft(y));
+
+            // Pie chart setup
+            const pieData = filteredData.map(d => ({ label: d.Feature, value: d.Importance }));
+
+            const radius = Math.min(width, height) / 2;
+            const arc = d3.arc().outerRadius(radius - 10).innerRadius(0);
+            const pie = d3.pie().sort(null).value(d => d.value);
+
+            const svgPie = d3.select("#pie-chart")
+                .append("g")
+                .attr("transform", `translate(${width / 2},${height / 2})`);
+
+            const pieSlices = svgPie.selectAll(".slice")
+                .data(pie(pieData))
+                .enter().append("g")
+                .attr("class", "slice");
+
+            pieSlices.append("path")
+                .attr("class", "pie-slice")
+                .attr("d", arc)
+                .style("fill", (d, i) => d3.schemeCategory10[i % 10]);
+
+            // Interactive Heatmap setup
+            const svgHeatmap = d3.select("#heatmap");
+            const gridSize = 80;
+            const maxImportance = d3.max(filteredData, d => d.Importance);
+            const colorScale = d3.scaleSequential(d3.interpolateYlGnBu).domain([0, maxImportance]);
+
+            svgHeatmap.selectAll("rect")
+                .data(filteredData)
+                .enter().append("rect")
+                .attr("x", (d, i) => (i % 3) * gridSize)
+                .attr("y", (d, i) => Math.floor(i / 3) * gridSize)
+                .attr("width", gridSize)
+                .attr("height", gridSize)
+                .style("fill", d => colorScale(d.Importance));
+
+            // Time Series
+            const svgTimeSeries = d3.select("#time-series");
+            const xTime = d3.scaleTime().domain(d3.extent(timeSeriesData, d => new Date(d.timestamp))).range([0, 500]);
+            const yTime = d3.scaleLinear().domain([0, d3.max(timeSeriesData, d => d.value)]).range([400, 0]);
+
+            svgTimeSeries.append("g").call(d3.axisBottom(xTime).ticks(d3.timeDay).tickFormat(d3.timeFormat("%b %d")));
+            svgTimeSeries.append("g").call(d3.axisLeft(yTime));
+
+            svgTimeSeries.selectAll("circle")
+                .data(timeSeriesData)
+                .enter().append("circle")
+                .attr("cx", d => xTime(new Date(d.timestamp)))
+                .attr("cy", d => yTime(d.value))
+                .attr("r", 5)
+                .style("fill", "orange");
+
+            // Correlation Heatmap (using example correlation data)
+            const correlationData = [
+                { feature1: "Q_VFD2_Temperature", feature2: "I_R01_Gripper_Pot", correlation: 0.9 },
+                { feature1: "Q_VFD2_Temperature", feature2: "I_R01_Gripper_Load", correlation: -0.6 },
+                { feature1: "Q_VFD2_Temperature", feature2: "M_R01_SJointAngle_Degree", correlation: 0.3 },
+                { feature1: "I_R01_Gripper_Pot", feature2: "I_R01_Gripper_Load", correlation: 0.8 },
+                { feature1: "I_R01_Gripper_Pot", feature2: "M_R01_SJointAngle_Degree", correlation: -0.4 },
+                { feature1: "I_R01_Gripper_Load", feature2: "M_R01_SJointAngle_Degree", correlation: 0.5 }
+            ];
+
+            const svgCorrelation = d3.select("#correlation-heatmap");
+            const colorScaleCorrelation = d3.scaleSequential(d3.interpolateCool).domain([-1, 1]);
+
+            svgCorrelation.selectAll("rect")
+                .data(correlationData)
+                .enter().append("rect")
+                .attr("x", (d, i) => (i % 3) * 50)
+                .attr("y", (d, i) => Math.floor(i / 3) * 50)
+                .attr("width", 50)
+                .attr("height", 50)
+                .style("fill", d => colorScaleCorrelation(d.correlation));
+        }
+
+        // Initial visualization on page load
+        updateVisualizations();
+
+        // Update visualizations when the user selects a different number of features
+        document.getElementById('feature-count').addEventListener('change', updateVisualizations);
+
+        // Slider to filter by Importance
+        document.getElementById('importance-range').addEventListener('input', function() {
+            const threshold = this.value;
+            document.getElementById('threshold-value').innerText = threshold;
+            d3.selectAll('.bar')
+                .style("opacity", d => d.Importance >= threshold ? 1 : 0.2);
+        });
+
+        // Toggle anomalies visibility
+        document.getElementById('toggle-anomaly').addEventListener('click', function() {
+            const anomalyVisible = d3.selectAll('.bar').style('opacity') === "0.2" ? false : true;
+            d3.selectAll('.bar')
+                .style("opacity", d => anomalyVisible ? 1 : (d.Importance < 50 ? 0.2 : 1)); // Example: hide anomalies below threshold
+        });
+    </script>
+</body>
+</html>
